@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.local
+node_modules/
+dist/
+.vite/
+*.egg-info/
+.venv/
+venv/
+eval/results/*.json
+!eval/results/.gitkeep
+*.log
+.DS_Store

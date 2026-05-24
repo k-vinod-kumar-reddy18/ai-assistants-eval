@@ -1,0 +1,66 @@
+name: Eval CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Lint
+        run: |
+          pip install ruff --quiet
+          ruff check backend/ eval/
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Install deps
+        run: |
+          pip install pytest httpx fastapi --quiet
+          pip install -r backend/oss/requirements.txt --quiet
+      - name: Run tests
+        run: pytest tests/ -v
+
+  eval-smoke:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Install eval deps
+        run: pip install -r eval/requirements.txt --quiet
+      - name: Start OSS backend (mock)
+        run: |
+          pip install -r backend/oss/requirements.txt --quiet
+          OSS_PROVIDER=mock uvicorn backend.oss.app:app --port 8001 &
+          sleep 3
+      - name: Start Frontier backend
+        run: |
+          pip install -r backend/frontier/requirements.txt --quiet
+          uvicorn backend.frontier.app:app --port 8002 &
+          sleep 3
+      - name: Run eval (5 prompts smoke test)
+        run: |
+          cd eval
+          python eval_runner.py --oss-url http://localhost:8001 \
+            --frontier-url http://localhost:8002 \
+            --output results/ci/ \
+            --concurrency 1
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval/results/ci/
